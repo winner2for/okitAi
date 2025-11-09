@@ -30,5 +30,5 @@
 ### Build manuel
 ```bash
 git clone https://github.com/winner2for/okitAi.git
-cd okit-ai
+cd okitAi
 buildozer android debug
