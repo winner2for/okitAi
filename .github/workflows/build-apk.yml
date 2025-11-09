@@ -1,0 +1,88 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [published]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git zip unzip openjdk-17-jdk python3-pip \
+          autoconf libtool pkg-config zlib1g-dev \
+          libncurses5-dev libncursesw5-dev libtinfo5 \
+          cmake libffi-dev libssl-dev libsqlite3-dev \
+          libjpeg-dev libpng-dev
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython==0.29.33
+        pip install -r requirements.txt
+        
+    - name: Create default assets
+      run: |
+        python create_assets.py
+        
+    - name: Inject API Key into App
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        python build_apk_with_key.py "$GEMINI_API_KEY"
+        # Vérification sécurisée
+        if grep -q "GEMINI_API_KEY_PLACEHOLDER" src/config.py; then
+          echo "❌ ERREUR: La clé API n'a pas été injectée"
+          exit 1
+        fi
+        echo "✅ Clé API injectée avec succès"
+        
+    - name: Build APK with Buildozer
+      run: |
+        buildozer -v android debug
+        echo "📱 APK créée avec succès"
+        ls -la bin/
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: okit-ai-apk
+        path: bin/*.apk
+        retention-days: 30
+        
+    - name: Upload APK to Release
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./bin/*.apk
+        asset_name: OkitAI-Android.apk
+        asset_content_type: application/vnd.android.package-archive
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test Python imports
+      run: |
+        python -c "import kivy; print('✅ Kivy importé')"
+        python -c "import google.generativeai; print('✅ Google Generative AI importé')"
+        echo "✅ Tous les tests passent"
