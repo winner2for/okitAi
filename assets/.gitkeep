@@ -1,0 +1,8 @@
+# Assets directory for Okit AI
+# This directory will be automatically populated with icons by create_assets.py
+# during the GitHub Actions build process.
+
+# Required files:
+# - wolf_icon.png (logo)
+# - user_icon.png (user avatar) 
+# - icon.png (app icon)
