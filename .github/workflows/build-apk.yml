@@ -69,7 +69,7 @@ jobs:
           exit 1
         fi
         
-    - name: Setup Buildozer configuration
+    - name: Setup Buildozer environment
       run: |
         # Initialiser buildozer si buildozer.spec n'existe pas
         if [ ! -f "buildozer.spec" ]; then
@@ -77,59 +77,38 @@ jobs:
           echo "📄 buildozer.spec créé"
         fi
         
-        # Forcer l'utilisation de l'Android SDK moderne
+        # Configurer pour accepter automatiquement les licences
         sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec || true
-        sed -i 's/#android.sdk_path =/android.sdk_path = .buildozer\/android\/platform\/android-sdk/' buildozer.spec || true
         
-        echo "🔧 Configuration Buildozer appliquée"
+        # Créer les dossiers nécessaires pour les licences
+        mkdir -p ~/.android/licenses
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
         
-    - name: Build APK using Docker approach
+        # Accepter toutes les licences nécessaires
+        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.android/licenses/android-sdk-license
+        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        
+        echo "✅ Environnement Buildozer configuré"
+        
+    - name: Build APK with Buildozer
       run: |
-        echo "🐳 Utilisation de l'approche Docker pour Buildozer..."
-        
-        # Essayer avec les outils système d'abord
-        sudo apt-get update
-        sudo apt-get install -y \
-          git zip unzip openjdk-17-jdk \
-          autoconf libtool pkg-config zlib1g-dev \
-          libncurses5-dev libncursesw5-dev \
-          cmake libffi-dev libssl-dev
-        
-        # Forcer l'acceptation des licences
-        mkdir -p ~/.android
-        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/licenses/android-sdk-license
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.android/licenses/android-sdk-license
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.android/licenses/android-sdk-license
-        
-        # Essayer de construire avec Buildozer
         echo "🏗️  Construction de l'APK..."
-        buildozer -v android debug || echo "⚠️  Première tentative échouée, continuation..."
         
-        # Si échec, essayer avec docker
-        if ! ls bin/*.apk 1> /dev/null 2>&1; then
-          echo "🚀 Essai avec Docker Buildozer..."
-          
-          # Installer Docker
-          sudo apt-get install -y docker.io
-          sudo usermod -a -G docker $USER
-          
-          # Utiliser l'image Docker officielle de Buildozer
-          docker run --rm \
-            -v $(pwd):/home/user/hostcwd \
-            -v ~/.buildozer:/home/user/.buildozer \
-            -e P4A_RELEASE_KEYALIAS=${{ secrets.KEYALIAS }} \
-            -e P4A_RELEASE_KEYSTORE_PASSWD=${{ secrets.KEYSTORE_PASS }} \
-            -e P4A_RELEASE_KEYALIAS_PASSWD=${{ secrets.KEYALIAS_PASS }} \
-            buildozer/buildozer \
-            android debug
-        fi
+        # Nettoyer d'abord
+        buildozer android clean || true
+        
+        # Construire l'APK
+        buildozer -v android debug
         
         # Vérifier le résultat
         if ls bin/*.apk 1> /dev/null 2>&1; then
           echo "✅ APK créée avec succès !"
           ls -la bin/
+          echo "📱 Fichier APK: $(ls bin/*.apk)"
         else
-          echo "❌ Échec de la construction de l'APK"
+          echo "❌ Aucun fichier APK trouvé"
+          echo "📁 Contenu du dossier bin/:"
+          ls -la bin/ || echo "Dossier bin/ non trouvé"
           exit 1
         fi
         
