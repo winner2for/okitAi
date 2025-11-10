@@ -14,7 +14,6 @@ orientation = portrait
 [buildozer]
 log_level = 2
 
-[app]
 presplash.filename = assets/wolf_icon.png
 icon.filename = assets/icon.png
 
@@ -24,7 +23,6 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 
-[app]
 android.allow_backup = True
 android.gradle_dependencies = com.google.android.gms:play-services-auth:20.7.0
 
