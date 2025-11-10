@@ -6,12 +6,34 @@ on:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04  # Utiliser une version plus ancienne qui marche mieux
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Setup environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          openjdk-11-jdk \
+          git \
+          zip \
+          unzip \
+          python3-pip \
+          autoconf \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          cmake
+          
+    - name: Install Python dependencies
+      run: |
+        pip3 install --upgrade pip
+        pip3 install buildozer==1.5.0 cython==0.29.33 kivy requests google-generativeai pillow
+        
     - name: Inject API Key
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -19,20 +41,38 @@ jobs:
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
         echo "✅ Clé API injectée"
         
-    - name: Build APK with Docker
+    - name: Pre-build setup
       run: |
-        # Utiliser l'image Docker officielle de Buildozer
-        docker run --rm \
-          -v $(pwd):/home/user/hostcwd \
-          -v buildozer_deps:/home/user/.buildozer \
-          -e P4A_RELEASE_KEYALIAS=${{ secrets.KEYALIAS }} \
-          -e P4A_RELEASE_KEYSTORE_PASSWD=${{ secrets.KEYSTORE_PASS }} \
-          -e P4A_RELEASE_KEYALIAS_PASSWD=${{ secrets.KEYALIAS_PASS }} \
-          buildozer/buildozer \
-          android debug
+        # Accepter les licences une fois pour toutes
+        mkdir -p ~/.android/licenses
+        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\n601085b94cd77f0b54ff86406957099ebe79c4d6" > ~/.android/licenses/android-sdk-license
+        
+        # Initialiser buildozer si besoin
+        if [ ! -f "buildozer.spec" ]; then
+          buildozer init
+        fi
+        
+    - name: Build APK
+      run: |
+        # Construire l'APK avec plus de verbosité
+        buildozer -v android debug 2>&1 | tail -50
+        
+    - name: Check and upload APK
+      run: |
+        if ls bin/*.apk 1> /dev/null 2>&1; then
+          echo "✅ APK créée avec succès !"
+          ls -la bin/
+        else
+          echo "❌ Aucun APK trouvé, tentative de construction manuelle..."
+          # Essayer une méthode alternative
+          buildozer android clean
+          buildozer -v android debug
+        fi
         
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-apk
+        name: okit-ai-apk
         path: bin/*.apk
+        retention-days: 30
