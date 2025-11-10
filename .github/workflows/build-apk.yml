@@ -12,68 +12,27 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          openjdk-11-jdk \
-          git \
-          zip \
-          unzip \
-          autoconf \
-          libtool \
-          pkg-config \
-          zlib1g-dev \
-          libncurses5-dev \
-          libncursesw5-dev \
-          cmake \
-          ninja-build
-          
-    - name: Install Python packages
-      run: |
-        pip install --upgrade pip
-        pip install python-for-android kivy requests google-generativeai pillow cython
-        
     - name: Inject API Key
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
-        echo "✅ Clé API injectée"
         
-    - name: Build with python-for-android
+    - name: Build with pre-configured Docker
       run: |
-        # Créer un projet python-for-android directement
-        p4a create \
-          --name "OkitAI" \
-          --version 1.0 \
-          --package com.winnu.okitai \
-          --requirements python3,kivy,requests,google-generativeai,pillow \
-          --arch arm64-v8a \
-          --arch armeabi-v7a \
-          --sdk-dir /usr/lib/android-sdk \
-          --ndk-dir /usr/lib/android-ndk \
-          --android-api 30 \
-          --private . \
-          --presplash assets/presplash.png \
-          --icon assets/icon.png \
-          --orientation portrait \
-          --window \
-          --debug
+        # Utiliser une image avec tout préinstallé
+        docker run --rm -v $(pwd):/src \
+          -w /src \
+          -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+          kivy/buildozer \
+          bash -c "
+          apt-get update && apt-get install -y python3-pip && \
+          pip3 install buildozer kivy requests google-generativeai pillow && \
+          buildozer -v android debug
+          "
         
-    - name: Find and upload APK
-      run: |
-        # Chercher l'APK générée
-        find . -name "*.apk" -type f | head -5
-        echo "📱 APK devrait être dans le dossier dist/"
-        
-    - name: Upload APK artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: okit-ai-apk
-        path: dist/*.apk
+        path: bin/*.apk
