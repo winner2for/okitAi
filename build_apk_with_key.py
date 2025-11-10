@@ -66,10 +66,20 @@ class AppConfig:
 setup()
 '''
     
+    # Écrire le fichier
     with open('src/config.py', 'w', encoding='utf-8') as f:
         f.write(config_content)
     
     print("✅ Fichier config.py mis à jour avec Gemini 2.0 Flash")
+    
+    # Vérification immédiate
+    with open('src/config.py', 'r', encoding='utf-8') as f:
+        content = f.read()
+        if api_key in content:
+            print("✅ Vérification: Clé API trouvée dans config.py")
+        else:
+            print("❌ Vérification: Clé API NON trouvée dans config.py")
+            raise ValueError("Échec de l'injection de la clé API")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
