@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   build-apk:
@@ -12,50 +12,68 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup environment
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk git zip python3-pip
-        pip3 install buildozer cython kivy
+        sudo apt-get install -y \
+          openjdk-11-jdk \
+          git \
+          zip \
+          unzip \
+          autoconf \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          cmake \
+          ninja-build
+          
+    - name: Install Python packages
+      run: |
+        pip install --upgrade pip
+        pip install python-for-android kivy requests google-generativeai pillow cython
         
     - name: Inject API Key
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
+        echo "✅ Clé API injectée"
         
-    - name: Force accept ALL Android licenses
+    - name: Build with python-for-android
       run: |
-        # Créer TOUTES les licences possibles
-        mkdir -p ~/.android/licenses
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        # Créer un projet python-for-android directement
+        p4a create \
+          --name "OkitAI" \
+          --version 1.0 \
+          --package com.winnu.okitai \
+          --requirements python3,kivy,requests,google-generativeai,pillow \
+          --arch arm64-v8a \
+          --arch armeabi-v7a \
+          --sdk-dir /usr/lib/android-sdk \
+          --ndk-dir /usr/lib/android-ndk \
+          --android-api 30 \
+          --private . \
+          --presplash assets/presplash.png \
+          --icon assets/icon.png \
+          --orientation portrait \
+          --window \
+          --debug
         
-        # Toutes les licences Android connues
-        cat > ~/.android/licenses/android-sdk-license << EOF
-        8933bad161af4178b1185d1a37fbf41ea5269c55
-        d56f5187479451eabf01fb78af6dfcb131a6481e
-        24333f8a63b6825ea9c5514f83c2829b004d1fee
-        84831b9409646a918e30573bab4c9c91346d8abd
-        601085b94cd77f0b54ff86406957099ebe79c4d6
-        33b6a2b64607f11b759f320ef9dff4ae5c47d97a
-        e9a4e2b5c3b2c3b1a3a2a1a0a9a8a7a6a5a4a3a2a1a0
-        841e5e5a9b8c161ea0eae6d821c3793563584b9a
-        d975bdef1dd4f5b52d6aa4b2a4a8e4c8e3b7e8e7
-         EOF
-        
-        # Copier partout
-        cp ~/.android/licenses/android-sdk-license ~/.buildozer/android/platform/android-sdk/licenses/
-        
-        echo "✅ Toutes les licences acceptées de force"
-        
-    - name: Build APK
+    - name: Find and upload APK
       run: |
-        # Forcer le téléchargement des bons outils
-        buildozer android clean
-        buildozer -v android debug
+        # Chercher l'APK générée
+        find . -name "*.apk" -type f | head -5
+        echo "📱 APK devrait être dans le dossier dist/"
         
-    - name: Upload APK
+    - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: okit-ai-apk
-        path: bin/*.apk
+        path: dist/*.apk
