@@ -18,18 +18,11 @@ jobs:
       run: |
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
         
-    - name: Build with pre-configured Docker
-      run: |
-        # Utiliser une image avec tout préinstallé
-        docker run --rm -v $(pwd):/src \
-          -w /src \
-          -e GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
-          kivy/buildozer \
-          bash -c "
-          apt-get update && apt-get install -y python3-pip && \
-          pip3 install buildozer kivy requests google-generativeai pillow && \
-          buildozer -v android debug
-          "
+    - name: Build with community action
+      uses: uutispam/buildozer-action@v1
+      with:
+        buildozer-version: 1.5.0
+        target: android debug
         
     - name: Upload APK
       uses: actions/upload-artifact@v4
