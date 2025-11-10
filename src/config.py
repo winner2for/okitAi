@@ -40,4 +40,4 @@ class AppConfig:
         logger.info("✅ Configuration Okit AI chargée avec Gemini 2.0 Flash")
 
 # Configuration automatique au démarrage
-setup()
+AppConfig.setup()  # ← CORRECTION ICI : AppConfig.setup() au lieu de setup()
