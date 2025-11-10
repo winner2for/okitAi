@@ -16,6 +16,13 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Find config.py location
+      run: |
+        echo "🔍 Recherche du fichier config.py..."
+        find . -name "config.py" -type f
+        echo "📁 Structure du projet :"
+        ls -la
+      
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -47,27 +54,44 @@ jobs:
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
-        echo "🔑 Vérification de la clé API..."
+        echo "🔑 Injection de la clé API dans src/config.py..."
+        
         # Vérifier que la clé est bien définie
         if [ -z "$GEMINI_API_KEY" ]; then
           echo "❌ ERREUR: GEMINI_API_KEY est vide"
           exit 1
         fi
         
-        python build_apk_with_key.py "$GEMINI_API_KEY"
-        
-        # Vérification CORRIGÉE - lire plus de lignes
-        if grep -q "YOUR_GEMINI_API_KEY_HERE" src/config.py; then
-          echo "❌ ERREUR: La clé API n'a pas été injectée"
-          echo "=== CONTENU COMPLET DE config.py ==="
-          cat src/config.py
-          echo "=== FIN DU CONTENU ==="
+        # Vérifier que le fichier existe
+        if [ ! -f "src/config.py" ]; then
+          echo "❌ Fichier src/config.py non trouvé"
+          ls -la src/
           exit 1
-        else
-          echo "✅ Clé API injectée avec succès - vérification passée"
-          echo "=== PREMIÈRES LIGNES DE config.py ==="
+        fi
+        
+        echo "📄 Fichier config.py trouvé dans src/"
+        
+        # Sauvegarder une copie pour debug
+        cp src/config.py src/config.py.backup
+        
+        # Injection avec sed
+        echo "🔄 Injection avec sed..."
+        sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
+        
+        # Vérification
+        echo "✅ Vérification de l'injection..."
+        if grep -q "$GEMINI_API_KEY" src/config.py; then
+          echo "✅ SUCCÈS: Clé API injectée avec succès !"
+          echo "=== PREMIÈRES LIGNES ==="
           head -n 15 src/config.py
           echo "=== FIN DE LA VÉRIFICATION ==="
+        else
+          echo "❌ ÉCHEC: La clé API n'a pas été injectée"
+          echo "=== CONTENU ACTUEL ==="
+          cat src/config.py
+          echo "=== DIFFÉRENCES ==="
+          diff -u src/config.py.backup src/config.py || true
+          exit 1
         fi
         
     - name: Accept Android SDK licenses
