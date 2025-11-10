@@ -30,13 +30,30 @@ jobs:
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
         echo "✅ Clé API injectée"
         
+    - name: Setup Android licenses
+      run: |
+        # Créer TOUTES les licences nécessaires
+        mkdir -p ~/.android/licenses
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        
+        # Licence SDK standard
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.android/licenses/android-sdk-license
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.android/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" >> ~/.android/licenses/android-sdk-license
+        
+        # Licence pour build-tools 36
+        echo "601085b94cd77f0b54ff86406957099ebe79c4d6" >> ~/.android/licenses/android-sdk-license
+        echo "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" >> ~/.android/licenses/android-sdk-license
+        
+        # Copier vers buildozer aussi
+        cp ~/.android/licenses/android-sdk-license ~/.buildozer/android/platform/android-sdk/licenses/
+        
+        echo "✅ Licences configurées"
+        
     - name: Build APK
       run: |
-        # Créer les licences pour éviter les erreurs
-        mkdir -p ~/.android/licenses
-        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/licenses/android-sdk-license
-        
-        # Lancer la construction directement
+        # Lancer la construction
         buildozer -v android debug
         
     - name: Upload APK
