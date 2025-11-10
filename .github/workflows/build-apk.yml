@@ -47,13 +47,24 @@ jobs:
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
-        python build_apk_with_key.py "$GEMINI_API_KEY"
-        # Vérification sécurisée - CORRIGÉ
-        if grep -q "YOUR_GEMINI_API_KEY_HERE" src/config.py; then
-          echo "❌ ERREUR: La clé API n'a pas été injectée"
+        echo "🔑 Vérification de la clé API..."
+        # Vérifier que la clé est bien définie
+        if [ -z "$GEMINI_API_KEY" ]; then
+          echo "❌ ERREUR: GEMINI_API_KEY est vide"
           exit 1
         fi
-        echo "✅ Clé API injectée avec succès"
+        
+        python build_apk_with_key.py "$GEMINI_API_KEY"
+        
+        # Vérification améliorée
+        if grep -q "YOUR_GEMINI_API_KEY_HERE" src/config.py; then
+          echo "❌ ERREUR: La clé API n'a pas été injectée"
+          echo "Contenu de config.py:"
+          head -n 10 src/config.py
+          exit 1
+        else
+          echo "✅ Clé API injectée avec succès - vérification passée"
+        fi
         
     - name: Accept Android SDK licenses
       run: |
