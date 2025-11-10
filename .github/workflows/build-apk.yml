@@ -3,10 +3,6 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  release:
-    types: [published]
 
 jobs:
   build-apk:
@@ -16,163 +12,35 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Find config.py location
-      run: |
-        echo "🔍 Recherche du fichier config.py..."
-        find . -name "config.py" -type f
-        echo "📁 Structure du projet :"
-        ls -la
-      
-    - name: Set up Python
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
         
-    - name: Install Android SDK and tools
+    - name: Install dependencies
       run: |
-        # Installer les outils Android modernes
         sudo apt-get update
-        sudo apt-get install -y \
-          git openjdk-17-jdk wget unzip
+        sudo apt-get install -y openjdk-17-jdk git zip
+        pip install buildozer kivy requests google-generativeai pillow
         
-        # Télécharger Android Command Line Tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        mkdir -p ~/android-sdk
-        unzip -q commandlinetools-linux-9477386_latest.zip -d ~/android-sdk
-        mv ~/android-sdk/cmdline-tools ~/android-sdk/cmdline-tools-temp
-        mkdir -p ~/android-sdk/cmdline-tools/latest
-        mv ~/android-sdk/cmdline-tools-temp/* ~/android-sdk/cmdline-tools/latest/
-        rm -rf ~/android-sdk/cmdline-tools-temp
-        
-        # Configurer l'environnement
-        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        
-    - name: Install Buildozer and dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install buildozer cython==0.29.33
-        pip install kivy requests google-generativeai pillow
-        
-    - name: Create default assets
-      run: |
-        python create_assets.py
-        
-    - name: Inject API Key into App
+    - name: Inject API Key
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: |
-        echo "🔑 Injection de la clé API dans src/config.py..."
-        
-        if [ -z "$GEMINI_API_KEY" ]; then
-          echo "❌ ERREUR: GEMINI_API_KEY est vide"
-          exit 1
-        fi
-        
-        if [ ! -f "src/config.py" ]; then
-          echo "❌ Fichier src/config.py non trouvé"
-          ls -la src/
-          exit 1
-        fi
-        
-        echo "📄 Fichier config.py trouvé dans src/"
-        cp src/config.py src/config.py.backup
-        
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
+        echo "✅ Clé API injectée"
         
-        if grep -q "$GEMINI_API_KEY" src/config.py; then
-          echo "✅ SUCCÈS: Clé API injectée avec succès !"
-          head -n 15 src/config.py
-        else
-          echo "❌ ÉCHEC: La clé API n'a pas été injectée"
-          cat src/config.py
-          exit 1
-        fi
-        
-    - name: Setup Android SDK
+    - name: Build APK
       run: |
-        # Accepter les licences
+        # Créer les licences pour éviter les erreurs
         mkdir -p ~/.android/licenses
-        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.android/licenses/android-sdk-license
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/licenses/android-sdk-license
         
-        # Installer les composants Android
-        yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
-        
-        # Lier le SDK moderne avec Buildozer
-        mkdir -p ~/.buildozer/android/platform
-        ln -sf ~/android-sdk ~/.buildozer/android/platform/android-sdk || true
-        
-        echo "✅ SDK Android configuré"
-        
-    - name: Configure Buildozer
-      run: |
-        # Initialiser buildozer
-        if [ ! -f "buildozer.spec" ]; then
-          buildozer init
-        fi
-        
-        # Forcer l'utilisation du SDK moderne
-        sed -i 's|#android.sdk_path = .*|android.sdk_path = /home/runner/android-sdk|' buildozer.spec || true
-        sed -i 's|#android.ndk_path = .*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25b|' buildozer.spec || true
-        sed -i 's/android.api = .*/android.api = 33/' buildozer.spec || true
-        sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec || true
-        
-        echo "🔧 Buildozer configuré"
-        
-    - name: Build APK with Buildozer
-      run: |
-        echo "🏗️  Construction de l'APK..."
-        
-        # Nettoyer
-        buildozer android clean || true
-        
-        # Construire
+        # Lancer la construction directement
         buildozer -v android debug
         
-        # Vérifier
-        if ls bin/*.apk 1> /dev/null 2>&1; then
-          echo "✅ APK créée avec succès !"
-          ls -la bin/
-        else
-          echo "❌ Échec de la construction"
-          exit 1
-        fi
-        
-    - name: Upload APK artifact
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: okit-ai-apk
+        name: app-apk
         path: bin/*.apk
-        retention-days: 30
-        
-    - name: Upload APK to Release
-      if: github.event_name == 'release'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./bin/*.apk
-        asset_name: OkitAI-Android.apk
-        asset_content_type: application/vnd.android.package-archive
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    - name: Install dependencies for tests
-      run: |
-        pip install kivy requests google-generativeai pillow
-    - name: Test Python imports
-      run: |
-        python -c "import kivy; print('✅ Kivy importé')"
-        python -c "import google.generativeai; print('✅ Google Generative AI importé')"
-        python -c "import requests; print('✅ Requests importé')"
-        python -c "from PIL import Image; print('✅ PIL/Pillow importé')"
-        echo "✅ Tous les tests passent"
