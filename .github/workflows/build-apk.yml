@@ -6,13 +6,18 @@ on:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-20.04  # Utiliser une version plus ancienne qui marche mieux
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup environment
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -20,19 +25,16 @@ jobs:
           git \
           zip \
           unzip \
-          python3-pip \
           autoconf \
           libtool \
           pkg-config \
           zlib1g-dev \
           libncurses5-dev \
-          libncursesw5-dev \
-          cmake
+          libncursesw5-dev
           
-    - name: Install Python dependencies
+    - name: Install Python packages
       run: |
-        pip3 install --upgrade pip
-        pip3 install buildozer==1.5.0 cython==0.29.33 kivy requests google-generativeai pillow
+        pip install buildozer cython kivy requests google-generativeai pillow
         
     - name: Inject API Key
       env:
@@ -41,38 +43,17 @@ jobs:
         sed -i 's/GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"/GEMINI_API_KEY = "'"$GEMINI_API_KEY"'"/' src/config.py
         echo "✅ Clé API injectée"
         
-    - name: Pre-build setup
+    - name: Build APK
       run: |
-        # Accepter les licences une fois pour toutes
+        # Accepter les licences
         mkdir -p ~/.android/licenses
         echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\n601085b94cd77f0b54ff86406957099ebe79c4d6" > ~/.android/licenses/android-sdk-license
         
-        # Initialiser buildozer si besoin
-        if [ ! -f "buildozer.spec" ]; then
-          buildozer init
-        fi
-        
-    - name: Build APK
-      run: |
-        # Construire l'APK avec plus de verbosité
-        buildozer -v android debug 2>&1 | tail -50
-        
-    - name: Check and upload APK
-      run: |
-        if ls bin/*.apk 1> /dev/null 2>&1; then
-          echo "✅ APK créée avec succès !"
-          ls -la bin/
-        else
-          echo "❌ Aucun APK trouvé, tentative de construction manuelle..."
-          # Essayer une méthode alternative
-          buildozer android clean
-          buildozer -v android debug
-        fi
+        # Construire l'APK
+        buildozer -v android debug
         
     - name: Upload APK
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: okit-ai-apk
         path: bin/*.apk
-        retention-days: 30
