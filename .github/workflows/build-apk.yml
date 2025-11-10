@@ -28,6 +28,28 @@ jobs:
       with:
         python-version: '3.9'
         
+    - name: Install Android SDK and tools
+      run: |
+        # Installer les outils Android modernes
+        sudo apt-get update
+        sudo apt-get install -y \
+          git openjdk-17-jdk wget unzip
+        
+        # Télécharger Android Command Line Tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        mkdir -p ~/android-sdk
+        unzip -q commandlinetools-linux-9477386_latest.zip -d ~/android-sdk
+        mv ~/android-sdk/cmdline-tools ~/android-sdk/cmdline-tools-temp
+        mkdir -p ~/android-sdk/cmdline-tools/latest
+        mv ~/android-sdk/cmdline-tools-temp/* ~/android-sdk/cmdline-tools/latest/
+        rm -rf ~/android-sdk/cmdline-tools-temp
+        
+        # Configurer l'environnement
+        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+        
     - name: Install Buildozer and dependencies
       run: |
         python -m pip install --upgrade pip
@@ -69,46 +91,52 @@ jobs:
           exit 1
         fi
         
-    - name: Setup Buildozer environment
+    - name: Setup Android SDK
       run: |
-        # Initialiser buildozer si buildozer.spec n'existe pas
+        # Accepter les licences
+        mkdir -p ~/.android/licenses
+        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.android/licenses/android-sdk-license
+        
+        # Installer les composants Android
+        yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+        
+        # Lier le SDK moderne avec Buildozer
+        mkdir -p ~/.buildozer/android/platform
+        ln -sf ~/android-sdk ~/.buildozer/android/platform/android-sdk || true
+        
+        echo "✅ SDK Android configuré"
+        
+    - name: Configure Buildozer
+      run: |
+        # Initialiser buildozer
         if [ ! -f "buildozer.spec" ]; then
           buildozer init
-          echo "📄 buildozer.spec créé"
         fi
         
-        # Configurer pour accepter automatiquement les licences
-        sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/' buildozer.spec || true
+        # Forcer l'utilisation du SDK moderne
+        sed -i 's|#android.sdk_path = .*|android.sdk_path = /home/runner/android-sdk|' buildozer.spec || true
+        sed -i 's|#android.ndk_path = .*|android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25b|' buildozer.spec || true
+        sed -i 's/android.api = .*/android.api = 33/' buildozer.spec || true
+        sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec || true
         
-        # Créer les dossiers nécessaires pour les licences
-        mkdir -p ~/.android/licenses
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        
-        # Accepter toutes les licences nécessaires
-        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.android/licenses/android-sdk-license
-        echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        
-        echo "✅ Environnement Buildozer configuré"
+        echo "🔧 Buildozer configuré"
         
     - name: Build APK with Buildozer
       run: |
         echo "🏗️  Construction de l'APK..."
         
-        # Nettoyer d'abord
+        # Nettoyer
         buildozer android clean || true
         
-        # Construire l'APK
+        # Construire
         buildozer -v android debug
         
-        # Vérifier le résultat
+        # Vérifier
         if ls bin/*.apk 1> /dev/null 2>&1; then
           echo "✅ APK créée avec succès !"
           ls -la bin/
-          echo "📱 Fichier APK: $(ls bin/*.apk)"
         else
-          echo "❌ Aucun fichier APK trouvé"
-          echo "📁 Contenu du dossier bin/:"
-          ls -la bin/ || echo "Dossier bin/ non trouvé"
+          echo "❌ Échec de la construction"
           exit 1
         fi
         
